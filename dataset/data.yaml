@@ -1,5 +1,13 @@
-train: /train/images
-val: /valid/images
-test: /test/images
-nc: 3  # Number of classes
-names: ['class1', 'class2', 'class3']  # Class names
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 1
+names: ['mallet']
+
+roboflow:
+  workspace: siya-sonpatki-rvtrz
+  project: hammerurc-bn62y-ky6wc
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/siya-sonpatki-rvtrz/hammerurc-bn62y-ky6wc/dataset/1
