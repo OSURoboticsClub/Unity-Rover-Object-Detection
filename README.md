@@ -1,4 +1,5 @@
 # Unity-Rover-Object-Detection
+This repo is not meant to be an official once, simply a REPO for me and Siya to use for file sharing while we work through YOLO. Once a full training or testing script has been written, it will be added onto the main REPO with CI and formatting.
 ## Setup
 *Requires Python 3*
 ### Package Installation
