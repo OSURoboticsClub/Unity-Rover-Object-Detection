@@ -3,7 +3,7 @@ from PIL import Image
 from ultralytics import YOLO
 
 # Load a pretrained YOLO11n model
-model = YOLO("runs/detect/train11/weights/best.pt")
+model = YOLO("weights/best.pt")
 
 # Run inference on 'bus.jpg'
 results = model("mallet1.jpg")  # results list
