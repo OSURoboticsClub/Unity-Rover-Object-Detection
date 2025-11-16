@@ -9,6 +9,7 @@ We need a reliable, scalable database for our web application. Requirements incl
 We will use the OSU COE High Performance Computing Cluster for training the object detection (YOLO) model.
 
 **Options Considered:**
+- Don't adjust model; allow training to run for 6+ hrs
 - Adjusting model to smaller variant (YOLOv11 to YOLOv5 or YOLOv8)
 - Use faster hardware (use more powerful GPU to increase maximum batch size)
 - Optimize hyperparameters (increase batch size and/or decrease size of input image)
@@ -26,3 +27,7 @@ The capabilities of the HPC Cluster would greatly reduce training time, allow fo
 
 **References:**
 - [COE HPC Cluster documentation](https://it.engineering.oregonstate.edu/hpc)
+- Project Board Issue (https://github.com/OSURoboticsClub/Rover_2023_2024/issues/39#issue-3603889956)
+- Team discussion notes on YOLO training (2025-11-09-MarsRoverAutonomy-Sprint3-ProgressReport), see:
+    - Progress vs Plan: Object Detection
+    - Risk and Quality: Risk 3
