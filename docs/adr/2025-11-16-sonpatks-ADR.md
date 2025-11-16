@@ -3,7 +3,7 @@
 **Status:** Pending
 
 **Context:**
-We need a reliable, scalable database for our web application. Requirements include ACID compliance, support for complex queries, and compatibility with our hosting provider.
+Training the YOLOv11 model on a hammer-only dataset currently takes over 6 hours on local machines. We need faster. more scalable compute resources to support continued model experimentation and dataset expansion. Requirements include support for higher batch sizes, consistent Python/CUDA environment, and capability to run multiple training jobs without hindering local development.
 
 **Decision:**
 We will use the OSU COE High Performance Computing Cluster for training the object detection (YOLO) model.
