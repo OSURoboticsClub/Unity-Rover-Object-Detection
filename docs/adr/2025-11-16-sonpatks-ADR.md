@@ -13,7 +13,7 @@ We will use the OSU COE High Performance Computing Cluster for training the obje
 - Adjusting model to smaller variant (YOLOv11 to YOLOv5 or YOLOv8)
 - Use faster hardware (use more powerful GPU to increase maximum batch size)
 - Optimize hyperparameters (increase batch size and/or decrease size of input image)
-- Use multi-scale training (train model images of differents sizes to improve detection of objects of different scales and distances)
+- Use multi-scale training (training on images of differents sizes to improve detection of objects of various scales and distances)
 - Caching (storing preprocessed images in memory to avoid increased loading times)
 
 **Rationale:**
