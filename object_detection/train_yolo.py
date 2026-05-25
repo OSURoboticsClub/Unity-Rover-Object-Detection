@@ -2,6 +2,15 @@
 """
 YOLO Training Script with robust augmentation for angle, distance, lighting, and occlusion.
 Usage: python train_yolo.py --model yolo11n.pt --data dataset_all/data.yaml [options]
+
+PostTrain Args
+  - --post_train — enables the fine-tuning phase after main training                                                                                                                                                                                                               
+  - --post_train_data — YAML pointing to the translated/modified-only dataset (required when --post_train is set)                                                                                                                                                                  
+  - --post_train_epochs — fine-tune duration, default 50                                                                                                                                                                                                                           
+  - --post_train_lr — lower initial LR (0.0005) appropriate for fine-tuning                                                                                                                                                                                                        
+  - --post_train_model — explicit checkpoint to fine-tune (optional override)                                                                                                                                                                                                      
+  - --skip_main_train — skip full training and jump straight to post-training 
+
 """
 
 import argparse
@@ -140,6 +149,20 @@ def parse_args():
     parser.add_argument("--device", default=None, help="Device: 0, cpu, etc. (auto-detected if omitted)")
     parser.add_argument("--project", default="runs/train", help="Output project directory (default: runs/train)")
     parser.add_argument("--name", default=None, help="Run name (auto-generated if omitted)")
+
+    # Post-training fine-tune on augmented/modified images only
+    parser.add_argument("--post_train", action="store_true",
+                        help="Fine-tune a pre-trained model on translated/modified images only")
+    parser.add_argument("--post_train_model", default=None,
+                        help="Checkpoint to fine-tune (default: best.pt from main training run, or --model if skipping main training)")
+    parser.add_argument("--post_train_data", default=None,
+                        help="Dataset YAML containing only translated/modified images (required when --post_train is set)")
+    parser.add_argument("--post_train_epochs", type=int, default=50,
+                        help="Fine-tuning epochs (default: 50)")
+    parser.add_argument("--post_train_lr", type=float, default=0.0005,
+                        help="Initial LR for fine-tuning (default: 0.0005, lower than base training)")
+    parser.add_argument("--skip_main_train", action="store_true",
+                        help="Skip main training and go straight to --post_train fine-tuning")
     return parser.parse_args()
 
 
@@ -149,68 +172,131 @@ def detect_device(requested):
     return "0" if torch.cuda.is_available() else "cpu"
 
 
-def main():
-    args = parse_args()
-    device = detect_device(args.device)
-    run_name = args.name or f"train_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+def run_post_train(args, device, base_weights: str):
+    """Fine-tune *base_weights* on translated/modified images only."""
+    if not args.post_train_data:
+        raise ValueError("--post_train_data is required when --post_train is set")
 
-    print(f"Model:    {args.model}")
-    print(f"Dataset:  {args.data}")
-    print(f"Device:   {device}")
-    print(f"Epochs:   {args.epochs}")
-    print(f"Batch:    {args.batch}  (effective load = batch × 4 with mosaic)")
-    print(f"ImgSz:    {args.imgsz}")
-    print(f"Output:   {args.project}/{run_name}")
+    pt_name = f"post_train_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    print("\n--- Post-training fine-tune ---")
+    print(f"Base weights: {base_weights}")
+    print(f"Dataset:      {args.post_train_data}")
+    print(f"Epochs:       {args.post_train_epochs}")
+    print(f"LR:           {args.post_train_lr}")
+    print(f"Output:       {args.project}/{pt_name}")
     print()
 
-    # Patch before YOLO initializes its dataset pipeline
     aug_module.Albumentations = RobustAlbumentations
     os.environ["NO_ALBUMENTATIONS_UPDATE"] = "1"
 
-    model = YOLO(args.model)
+    model = YOLO(base_weights)
 
     model.train(
-        data=args.data,
-        epochs=args.epochs,
+        data=args.post_train_data,
+        epochs=args.post_train_epochs,
         imgsz=args.imgsz,
         batch=args.batch,
         workers=args.workers,
         device=device,
         project=args.project,
-        name=run_name,
-        amp=True,            # fp16 mixed precision: cuts VRAM ~40-50%
-        # --- Built-in geometric augmentations ---
-        # NOTE: degrees/scale/perspective are intentionally disabled here.
-        # RobustAlbumentations already applies A.Affine (rotate, scale) and
-        # A.Perspective. Running both pipelines is redundant augmentation and
-        # wastes CPU budget that increases effective batch prep time.
+        name=pt_name,
+        amp=True,
+        lr0=args.post_train_lr,
+        lrf=args.post_train_lr * 0.1,   # cosine decay end-LR
+        warmup_epochs=2,
+        # Minimal geometric augmentation — the dataset already contains
+        # translated/modified images, so keep only light flips/HSV.
         degrees=0.0,
         scale=0.0,
         perspective=0.0,
-        translate=0.15,
-        shear=8,
-        flipud=0.15,
+        translate=0.05,
+        shear=0.0,
+        flipud=0.1,
         fliplr=0.5,
-        # --- Mosaic / mix augmentations ---
-        # mosaic=1.0 creates a 2×imgsz canvas from 4 images per sample — the
-        # single biggest VRAM multiplier. keep it but trim the extras that also
-        # load additional images per step.
-        mosaic=1.0,
-        close_mosaic=10,     # disable mosaic for final 10 epochs (default, made explicit)
-        mixup=0.1,           # reduced from 0.2 — each mixup sample loads a second image
-        copy_paste=0.1,      # reduced from 0.15 — same reason
-        # --- HSV color jitter ---
-        hsv_h=0.015,
-        hsv_s=0.7,
-        hsv_v=0.5,
-        # --- Output ---
+        mosaic=0.5,
+        close_mosaic=5,
+        mixup=0.0,
+        copy_paste=0.0,
+        hsv_h=0.01,
+        hsv_s=0.4,
+        hsv_v=0.3,
         plots=True,
         save=True,
         val=True,
     )
 
     model.val()
-    print(f"\nTraining complete. Best weights: {args.project}/{run_name}/weights/best.pt")
+    print(f"\nPost-training complete. Best weights: {args.project}/{pt_name}/weights/best.pt")
+    return f"{args.project}/{pt_name}/weights/best.pt"
+
+
+def main():
+    args = parse_args()
+    device = detect_device(args.device)
+    run_name = args.name or f"train_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+    aug_module.Albumentations = RobustAlbumentations
+    os.environ["NO_ALBUMENTATIONS_UPDATE"] = "1"
+
+    best_weights = None
+
+    if not args.skip_main_train:
+        print(f"Model:    {args.model}")
+        print(f"Dataset:  {args.data}")
+        print(f"Device:   {device}")
+        print(f"Epochs:   {args.epochs}")
+        print(f"Batch:    {args.batch}  (effective load = batch × 4 with mosaic)")
+        print(f"ImgSz:    {args.imgsz}")
+        print(f"Output:   {args.project}/{run_name}")
+        print()
+
+        model = YOLO(args.model)
+
+        model.train(
+            data=args.data,
+            epochs=args.epochs,
+            imgsz=args.imgsz,
+            batch=args.batch,
+            workers=args.workers,
+            device=device,
+            project=args.project,
+            name=run_name,
+            amp=True,
+            # NOTE: degrees/scale/perspective intentionally disabled —
+            # RobustAlbumentations handles rotation, scale, and perspective.
+            degrees=0.0,
+            scale=0.0,
+            perspective=0.0,
+            translate=0.15,
+            shear=8,
+            flipud=0.15,
+            fliplr=0.5,
+            mosaic=1.0,
+            close_mosaic=10,
+            mixup=0.1,
+            copy_paste=0.1,
+            hsv_h=0.015,
+            hsv_s=0.7,
+            hsv_v=0.5,
+            plots=True,
+            save=True,
+            val=True,
+        )
+
+        model.val()
+        best_weights = f"{args.project}/{run_name}/weights/best.pt"
+        print(f"\nTraining complete. Best weights: {best_weights}")
+
+    if args.post_train:
+        # Resolve which checkpoint to fine-tune
+        if args.post_train_model:
+            pt_base = args.post_train_model
+        elif best_weights and os.path.isfile(best_weights):
+            pt_base = best_weights
+        else:
+            # Fall back to --model (user is running post_train standalone)
+            pt_base = args.model
+        run_post_train(args, device, pt_base)
 
 
 if __name__ == "__main__":
