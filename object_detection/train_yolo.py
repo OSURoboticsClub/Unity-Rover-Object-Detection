@@ -23,6 +23,12 @@ import ultralytics.data.augment as aug_module
 from datetime import datetime
 from ultralytics import YOLO
 
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+
 
 class RobustAlbumentations:
     """Augmentation pipeline targeting angle variation, small/far objects, low light, and occlusion."""
@@ -143,8 +149,8 @@ def parse_args():
     parser.add_argument("--model", default="yolo11n.pt", help="YOLO model checkpoint (default: yolo11n.pt)")
     parser.add_argument("--data", default="dataset_all/data.yaml", help="Dataset YAML (default: dataset_all/data.yaml)")
     parser.add_argument("--epochs", type=int, default=200, help="Training epochs (default: 200)")
-    parser.add_argument("--imgsz", type=int, default=640, help="Image size (default: 640). Use 512 or 416 on 8GB VRAM.")
-    parser.add_argument("--batch", type=int, default=8, help="Batch size (default: 8). Mosaic x4 multiplies effective load; 16+ OOMs on 8GB.")
+    parser.add_argument("--imgsz", type=int, default=1280, help="Image size (default: 640). Use 512 or 416 on 8GB VRAM.")
+    parser.add_argument("--batch", type=int, default=64, help="Batch size (default: 8). Mosaic x4 multiplies effective load; 16+ OOMs on 8GB.")
     parser.add_argument("--workers", type=int, default=4, help="Dataloader workers (default: 4). High values spike RAM with mosaic.")
     parser.add_argument("--device", default=None, help="Device: 0, cpu, etc. (auto-detected if omitted)")
     parser.add_argument("--project", default="runs/train", help="Output project directory (default: runs/train)")
@@ -163,6 +169,12 @@ def parse_args():
                         help="Initial LR for fine-tuning (default: 0.0005, lower than base training)")
     parser.add_argument("--skip_main_train", action="store_true",
                         help="Skip main training and go straight to --post_train fine-tuning")
+
+    # W&B logging
+    parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
+    parser.add_argument("--wandb_project", default="rover-object-detection",
+                        help="W&B project name (default: rover-object-detection)")
+    parser.add_argument("--wandb_entity", default=None, help="W&B entity/team (optional)")
     return parser.parse_args()
 
 
@@ -170,6 +182,33 @@ def detect_device(requested):
     if requested is not None:
         return requested
     return "0" if torch.cuda.is_available() else "cpu"
+
+
+def init_wandb(args, run_name: str, tags: list[str] | None = None):
+    if not args.wandb:
+        return None
+    if not WANDB_AVAILABLE:
+        print("WARNING: wandb not installed — run `pip install wandb` to enable logging.")
+        return None
+    run = wandb.init(
+        project=args.wandb_project,
+        entity=args.wandb_entity,
+        name=run_name,
+        tags=tags or [],
+        config={
+            "model": args.model,
+            "data": args.data,
+            "epochs": args.epochs,
+            "imgsz": args.imgsz,
+            "batch": args.batch,
+            "post_train": args.post_train,
+            "post_train_data": args.post_train_data,
+            "post_train_epochs": args.post_train_epochs,
+            "post_train_lr": args.post_train_lr,
+        },
+        resume="allow",
+    )
+    return run
 
 
 def run_post_train(args, device, base_weights: str):
@@ -185,6 +224,8 @@ def run_post_train(args, device, base_weights: str):
     print(f"LR:           {args.post_train_lr}")
     print(f"Output:       {args.project}/{pt_name}")
     print()
+
+    init_wandb(args, run_name=pt_name, tags=["post_train"])
 
     aug_module.Albumentations = RobustAlbumentations
     os.environ["NO_ALBUMENTATIONS_UPDATE"] = "1"
@@ -235,8 +276,8 @@ def main():
     device = detect_device(args.device)
     run_name = args.name or f"train_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-    aug_module.Albumentations = RobustAlbumentations
-    os.environ["NO_ALBUMENTATIONS_UPDATE"] = "1"
+    #aug_module.Albumentations = RobustAlbumentations
+    #os.environ["NO_ALBUMENTATIONS_UPDATE"] = "1"
 
     best_weights = None
 
@@ -250,6 +291,8 @@ def main():
         print(f"Output:   {args.project}/{run_name}")
         print()
 
+        init_wandb(args, run_name=run_name, tags=["main_train"])
+
         model = YOLO(args.model)
 
         model.train(
@@ -261,23 +304,25 @@ def main():
             device=device,
             project=args.project,
             name=run_name,
-            amp=True,
+            patience=50,
+            optimizer="AdamW",
+            #amp=True,
             # NOTE: degrees/scale/perspective intentionally disabled —
             # RobustAlbumentations handles rotation, scale, and perspective.
-            degrees=0.0,
-            scale=0.0,
-            perspective=0.0,
-            translate=0.15,
-            shear=8,
-            flipud=0.15,
-            fliplr=0.5,
-            mosaic=1.0,
-            close_mosaic=10,
-            mixup=0.1,
-            copy_paste=0.1,
-            hsv_h=0.015,
-            hsv_s=0.7,
-            hsv_v=0.5,
+            #degrees=0.0,
+            #scale=0.0,
+            #perspective=0.0,
+            #translate=0.15,
+            #shear=8,
+            #flipud=0.15,
+            #fliplr=0.5,
+            #mosaic=1.0,
+            #close_mosaic=10,
+            #mixup=0.1,
+            #copy_paste=0.1,
+            #hsv_h=0.015,
+            #hsv_s=0.7,
+            #hsv_v=0.5,
             plots=True,
             save=True,
             val=True,
