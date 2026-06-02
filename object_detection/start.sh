@@ -1,0 +1,3 @@
+python train_yolo.py --model yolo26n.pt --data ../dataset/dataset_BOTTLE/data.yaml --name "BOTTLE-FINAL" --epochs 200 --project final_train --wandb
+python train_yolo.py --model yolo26n.pt --data ../dataset/dataset_HAMMER/data.yaml --name "HAMMER-FINAL" --epochs 200 --project final_train --wandb
+python train_yolo.py --model yolo26n.pt --data ../dataset/dataset_ROCK_HAMMER/data.yaml --name "ROCKHAMMER-FINAL" --epochs 200 --project final_train --wandb
